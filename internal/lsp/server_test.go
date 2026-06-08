@@ -72,6 +72,9 @@ func TestServerInitializeAdvertisesCapabilities(t *testing.T) {
 	if !response.Result.Capabilities.HoverProvider {
 		t.Fatal("expected hover provider")
 	}
+	if !response.Result.Capabilities.InlayHintProvider {
+		t.Fatal("expected inlay hint provider")
+	}
 	if !response.Result.Capabilities.SemanticTokensProvider.Full {
 		t.Fatal("expected full semantic tokens provider")
 	}
@@ -1978,6 +1981,99 @@ func TestHoverUsesStoredDocument(t *testing.T) {
 	}
 	if response.Result.Contents.Value != "`rectangle` is a D2 shape." {
 		t.Fatalf("unexpected hover content %q", response.Result.Contents.Value)
+	}
+}
+
+func TestInlayHintReturnsImportPathHints(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{
+		URI:     "file:///workspace/index.d2",
+		Version: 1,
+		Text:    "hey: @ok\n",
+	})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentInlayHint,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///workspace/index.d2",
+			},
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 0, "character": 0},
+				"end":   map[string]interface{}{"line": 0, "character": 20},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle inlayHint: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []d2features.InlayHint `json:"result"`
+		Error  *rpcError              `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal inlayHint response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected inlayHint error: %#v", response.Error)
+	}
+	if len(response.Result) != 1 {
+		t.Fatalf("expected one inlay hint, got %#v", response.Result)
+	}
+	if response.Result[0].Label != " => /workspace/ok.d2" {
+		t.Fatalf("unexpected inlay hint %#v", response.Result[0])
+	}
+}
+
+func TestInlayHintFiltersByRange(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{
+		URI:     "file:///workspace/index.d2",
+		Version: 1,
+		Text:    "hey: @ok\n",
+	})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentInlayHint,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///workspace/index.d2",
+			},
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 0, "character": 0},
+				"end":   map[string]interface{}{"line": 0, "character": 3},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle inlayHint: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []d2features.InlayHint `json:"result"`
+		Error  *rpcError              `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal inlayHint response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected inlayHint error: %#v", response.Error)
+	}
+	if len(response.Result) != 0 {
+		t.Fatalf("expected no inlay hints, got %#v", response.Result)
 	}
 }
 

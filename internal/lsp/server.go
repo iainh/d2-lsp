@@ -40,6 +40,7 @@ const (
 	methodTextDocumentDefinition         = "textDocument/definition"
 	methodTextDocumentDocumentHighlight  = "textDocument/documentHighlight"
 	methodTextDocumentHover              = "textDocument/hover"
+	methodTextDocumentInlayHint          = "textDocument/inlayHint"
 	methodTextDocumentSemanticTokensFull = "textDocument/semanticTokens/full"
 	methodTextDocumentPrepareRename      = "textDocument/prepareRename"
 	methodTextDocumentRename             = "textDocument/rename"
@@ -179,6 +180,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 				DefinitionProvider:         true,
 				DocumentHighlightProvider:  true,
 				HoverProvider:              true,
+				InlayHintProvider:          true,
 				SemanticTokensProvider: semanticTokensOptions{
 					Legend: semanticTokensLegend{
 						TokenTypes:     d2features.SemanticTokenTypes,
@@ -371,6 +373,23 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 			return nil, &rpcError{Code: errInternalError, Message: err.Error()}
 		}
 		return result, nil
+	case methodTextDocumentInlayHint:
+		var inlayHint inlayHintParams
+		if err := json.Unmarshal(params, &inlayHint); err != nil {
+			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
+		}
+
+		doc, ok := s.document(inlayHint.TextDocument.URI)
+		if !ok {
+			return []d2features.InlayHint{}, nil
+		}
+		path, _, _ := s.documentFilesystem(doc)
+
+		hints, err := d2features.InlayHints(path, doc.Text)
+		if err != nil {
+			return nil, &rpcError{Code: errInternalError, Message: err.Error()}
+		}
+		return filterInlayHints(hints, inlayHint.Range), nil
 	case methodTextDocumentSemanticTokensFull:
 		var semanticTokens semanticTokensParams
 		if err := json.Unmarshal(params, &semanticTokens); err != nil {
@@ -1052,6 +1071,29 @@ func containsLSPPosition(r d2features.Range, pos position) bool {
 		return false
 	}
 	if pos.Line == r.End.Line && pos.Character >= r.End.Character {
+		return false
+	}
+	return true
+}
+
+func filterInlayHints(hints []d2features.InlayHint, r rangePosition) []d2features.InlayHint {
+	filtered := make([]d2features.InlayHint, 0, len(hints))
+	for _, hint := range hints {
+		if containsFeaturePositionInRange(hint.Position, r) {
+			filtered = append(filtered, hint)
+		}
+	}
+	return filtered
+}
+
+func containsFeaturePositionInRange(pos d2features.Position, r rangePosition) bool {
+	if pos.Line < r.Start.Line || pos.Line > r.End.Line {
+		return false
+	}
+	if pos.Line == r.Start.Line && pos.Character < r.Start.Character {
+		return false
+	}
+	if pos.Line == r.End.Line && pos.Character > r.End.Character {
 		return false
 	}
 	return true

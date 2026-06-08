@@ -96,6 +96,7 @@ type serverCapabilities struct {
 	DefinitionProvider         bool                    `json:"definitionProvider,omitempty"`
 	DocumentHighlightProvider  bool                    `json:"documentHighlightProvider,omitempty"`
 	HoverProvider              bool                    `json:"hoverProvider,omitempty"`
+	InlayHintProvider          bool                    `json:"inlayHintProvider,omitempty"`
 	SemanticTokensProvider     semanticTokensOptions   `json:"semanticTokensProvider,omitempty"`
 	RenameProvider             renameOptions           `json:"renameProvider,omitempty"`
 	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
@@ -251,6 +252,11 @@ type documentHighlightParams struct {
 type hoverParams struct {
 	TextDocument textDocumentIdentifier `json:"textDocument"`
 	Position     position               `json:"position"`
+}
+
+type inlayHintParams struct {
+	TextDocument textDocumentIdentifier `json:"textDocument"`
+	Range        rangePosition          `json:"range"`
 }
 
 type semanticTokensParams struct {

@@ -22,6 +22,7 @@ Current support:
 - go-to-definition via upstream D2 reference resolution, including imported workspace files
 - document highlights via upstream D2 reference resolution
 - hover for D2 keywords and selected values
+- inlay hints for resolved D2 import paths
 - semantic tokens from the D2 AST
 - rename via upstream D2 reference resolution
 - selection ranges from the D2 AST
