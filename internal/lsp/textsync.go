@@ -12,11 +12,7 @@ func applyContentChanges(text string, changes []textDocumentContentChangeEvent) 
 			continue
 		}
 
-		start, err := offsetForPosition(text, change.Range.Start)
-		if err != nil {
-			return "", err
-		}
-		end, err := offsetForPosition(text, change.Range.End)
+		start, end, err := offsetsForRange(text, *change.Range)
 		if err != nil {
 			return "", err
 		}
@@ -27,6 +23,79 @@ func applyContentChanges(text string, changes []textDocumentContentChangeEvent) 
 		text = text[:start] + change.Text + text[end:]
 	}
 	return text, nil
+}
+
+func offsetsForRange(text string, r rangePosition) (int, int, error) {
+	if r.Start.Line < 0 || r.Start.Character < 0 {
+		return 0, 0, fmt.Errorf("invalid negative position line=%d character=%d", r.Start.Line, r.Start.Character)
+	}
+	if r.End.Line < 0 || r.End.Character < 0 {
+		return 0, 0, fmt.Errorf("invalid negative position line=%d character=%d", r.End.Line, r.End.Character)
+	}
+	if r.Start.Line > r.End.Line || (r.Start.Line == r.End.Line && r.Start.Character > r.End.Character) {
+		return 0, 0, fmt.Errorf("invalid content change range: start offset %d is after end offset %d", r.Start.Line, r.End.Line)
+	}
+
+	start, end := -1, -1
+	line := 0
+	character := 0
+	if r.Start.Line == 0 && r.Start.Character == 0 {
+		start = 0
+	}
+	if r.End.Line == 0 && r.End.Character == 0 {
+		end = 0
+	}
+	if start >= 0 && end >= 0 {
+		return start, end, nil
+	}
+
+	for offset, runeValue := range text {
+		if runeValue == '\n' {
+			line++
+			character = 0
+			nextOffset := offset + 1
+			if start < 0 && r.Start.Line == line && r.Start.Character == character {
+				start = nextOffset
+			}
+			if end < 0 && r.End.Line == line && r.End.Character == character {
+				end = nextOffset
+			}
+			if start >= 0 && end >= 0 {
+				return start, end, nil
+			}
+			continue
+		}
+
+		if runeValue > 0xFFFF {
+			character += 2
+		} else {
+			character++
+		}
+		nextOffset := offset + utf8.RuneLen(runeValue)
+		if start < 0 && r.Start.Line == line && r.Start.Character == character {
+			start = nextOffset
+		}
+		if end < 0 && r.End.Line == line && r.End.Character == character {
+			end = nextOffset
+		}
+		if start >= 0 && end >= 0 {
+			return start, end, nil
+		}
+	}
+
+	if start < 0 && r.Start.Line == line && r.Start.Character == character {
+		start = len(text)
+	}
+	if end < 0 && r.End.Line == line && r.End.Character == character {
+		end = len(text)
+	}
+	if start < 0 {
+		return 0, 0, fmt.Errorf("position line=%d character=%d is outside document", r.Start.Line, r.Start.Character)
+	}
+	if end < 0 {
+		return 0, 0, fmt.Errorf("position line=%d character=%d is outside document", r.End.Line, r.End.Character)
+	}
+	return start, end, nil
 }
 
 func offsetForPosition(text string, pos position) (int, error) {

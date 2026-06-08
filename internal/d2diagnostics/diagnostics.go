@@ -2,6 +2,7 @@ package d2diagnostics
 
 import (
 	"errors"
+	"io/fs"
 	"strings"
 
 	"oss.terrastruct.com/d2/d2ast"
@@ -39,46 +40,43 @@ func ParseInFiles(path, text string, files map[string]string) []Diagnostic {
 	return parse(path, text, files)
 }
 
-func parse(path, text string, files map[string]string) []Diagnostic {
-	parseErr := &d2parser.ParseError{}
-	_, err := d2parser.Parse(path, strings.NewReader(text), &d2parser.ParseOptions{
-		UTF16Pos:   true,
-		ParseError: parseErr,
-	})
+func ParseAllInFiles(files map[string]string) map[string][]Diagnostic {
+	diagnostics := make(map[string][]Diagnostic, len(files))
+	fileSystem, err := memfs.New(files)
 	if err != nil {
-		var pe *d2parser.ParseError
-		if errors.As(err, &pe) && pe != parseErr {
-			parseErr = pe
+		for path := range files {
+			diagnostics[path] = []Diagnostic{errorDiagnostic(err)}
 		}
+		return diagnostics
 	}
 
-	if parseErr.Empty() {
-		return compileDiagnostics(path, text, files)
+	for path, text := range files {
+		diagnostics[path] = compileDiagnosticsWithFS(path, text, fileSystem)
 	}
+	return diagnostics
+}
 
-	return diagnosticsFromD2Errors(parseErr.Errors)
+func parse(path, text string, files map[string]string) []Diagnostic {
+	return compileDiagnostics(path, text, files)
 }
 
 func compileDiagnostics(path, text string, files map[string]string) []Diagnostic {
+	var fileSystem fs.FS
+	if len(files) > 0 {
+		memFileSystem, err := memfs.New(files)
+		if err != nil {
+			return []Diagnostic{errorDiagnostic(err)}
+		}
+		fileSystem = memFileSystem
+	}
+	return compileDiagnosticsWithFS(path, text, fileSystem)
+}
+
+func compileDiagnosticsWithFS(path, text string, fs fs.FS) []Diagnostic {
 	options := &d2compiler.CompileOptions{
 		UTF16Pos: true,
+		FS:       fs,
 	}
-	if len(files) > 0 {
-		fs, err := memfs.New(files)
-		if err != nil {
-			return []Diagnostic{{
-				Range: Range{
-					Start: Position{},
-					End:   Position{},
-				},
-				Severity: SeverityError,
-				Source:   "d2",
-				Message:  err.Error(),
-			}}
-		}
-		options.FS = fs
-	}
-
 	_, _, err := d2compiler.Compile(path, strings.NewReader(text), options)
 	if err == nil {
 		return nil
@@ -86,18 +84,22 @@ func compileDiagnostics(path, text string, files map[string]string) []Diagnostic
 
 	var pe *d2parser.ParseError
 	if !errors.As(err, &pe) {
-		return []Diagnostic{{
-			Range: Range{
-				Start: Position{},
-				End:   Position{},
-			},
-			Severity: SeverityError,
-			Source:   "d2",
-			Message:  err.Error(),
-		}}
+		return []Diagnostic{errorDiagnostic(err)}
 	}
 
 	return diagnosticsFromD2Errors(pe.Errors)
+}
+
+func errorDiagnostic(err error) Diagnostic {
+	return Diagnostic{
+		Range: Range{
+			Start: Position{},
+			End:   Position{},
+		},
+		Severity: SeverityError,
+		Source:   "d2",
+		Message:  err.Error(),
+	}
 }
 
 func diagnosticsFromD2Errors(errs []d2ast.Error) []Diagnostic {

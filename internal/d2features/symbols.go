@@ -51,7 +51,7 @@ func Symbols(path, text string) ([]DocumentSymbol, error) {
 }
 
 func symbolsForMap(m *d2ast.Map) []DocumentSymbol {
-	var symbols []DocumentSymbol
+	symbols := make([]DocumentSymbol, 0, len(m.Nodes))
 	for _, node := range m.Nodes {
 		switch {
 		case node.Import != nil:
@@ -83,6 +83,10 @@ func symbolForMapKey(mk *d2ast.Key) DocumentSymbol {
 }
 
 func symbolName(mk *d2ast.Key) string {
+	if name, ok := simpleSymbolName(mk); ok {
+		return name
+	}
+
 	nameOnly := &d2ast.Key{
 		Range:        mk.Range,
 		Ampersand:    mk.Ampersand,
@@ -98,6 +102,43 @@ func symbolName(mk *d2ast.Key) string {
 		return "<unknown>"
 	}
 	return name
+}
+
+func simpleSymbolName(mk *d2ast.Key) (string, bool) {
+	if mk.Key == nil || len(mk.Key.Path) == 0 || len(mk.Edges) > 0 || mk.EdgeIndex != nil || mk.EdgeKey != nil {
+		return "", false
+	}
+
+	parts := make([]string, 0, len(mk.Key.Path))
+	for _, part := range mk.Key.Path {
+		scalar := part.Unbox()
+		if scalar == nil {
+			return "", false
+		}
+		value := scalar.ScalarString()
+		if !isSimpleSymbolPart(value) {
+			return "", false
+		}
+		parts = append(parts, value)
+	}
+	return strings.Join(parts, "."), true
+}
+
+func isSimpleSymbolPart(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '_':
+		case i > 0 && r >= '0' && r <= '9':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func symbolForImport(imp *d2ast.Import) (DocumentSymbol, bool) {

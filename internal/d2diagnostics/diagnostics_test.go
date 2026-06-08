@@ -71,3 +71,20 @@ func TestParseInFilesReturnsImportedCompilerDiagnostics(t *testing.T) {
 		t.Fatal("expected diagnostic message")
 	}
 }
+
+func TestParseAllInFilesUsesImportedFiles(t *testing.T) {
+	files := map[string]string{
+		"index.d2": "hey: @ok\nhey.okay\n",
+		"ok.d2":    "okay\n",
+	}
+
+	diagnostics := ParseAllInFiles(files)
+	if len(diagnostics) != len(files) {
+		t.Fatalf("expected diagnostics for %d files, got %d", len(files), len(diagnostics))
+	}
+	for path, pathDiagnostics := range diagnostics {
+		if len(pathDiagnostics) != 0 {
+			t.Fatalf("expected no diagnostics for %s, got %#v", path, pathDiagnostics)
+		}
+	}
+}

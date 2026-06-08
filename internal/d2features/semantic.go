@@ -54,7 +54,7 @@ func SemanticTokensFor(path, text string) (SemanticTokens, error) {
 		return SemanticTokens{}, nil
 	}
 
-	var tokens []semanticToken
+	tokens := make([]semanticToken, 0, len(ast.Nodes)*2)
 	collectMapSemanticTokens(ast, &tokens)
 	sortSemanticTokens(tokens)
 	return SemanticTokens{Data: encodeSemanticTokens(tokens)}, nil

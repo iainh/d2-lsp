@@ -1141,6 +1141,7 @@ func (s *Server) publishWorkspaceDiagnostics(writer io.Writer) error {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	diagnosticsByPath := d2diagnostics.ParseAllInFiles(files)
 
 	for _, path := range paths {
 		uri := uriByPath[path]
@@ -1149,7 +1150,7 @@ func (s *Server) publishWorkspaceDiagnostics(writer io.Writer) error {
 		}
 		params := publishDiagnosticsParams{
 			URI:         uri,
-			Diagnostics: d2diagnostics.ParseInFiles(path, files[path], files),
+			Diagnostics: diagnosticsByPath[path],
 		}
 		if err := writeJSON(writer, notificationMessage{
 			JSONRPC: jsonRPCVersion,
