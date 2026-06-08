@@ -16,6 +16,8 @@ import (
 	"github.com/iainh/d2-lsp/internal/d2features"
 )
 
+var ErrExitWithoutShutdown = errors.New("exit received before shutdown")
+
 const (
 	jsonRPCVersion = "2.0"
 
@@ -77,6 +79,7 @@ type Server struct {
 	shutdown  bool
 	rootPaths []string
 	settings  serverSettings
+	client    clientCapabilities
 	documents map[string]document
 }
 
@@ -119,6 +122,12 @@ func (s *Server) Serve(reader io.Reader, writer io.Writer) error {
 			return err
 		}
 		if shouldExit {
+			s.mu.Lock()
+			shutdown := s.shutdown
+			s.mu.Unlock()
+			if !shutdown {
+				return ErrExitWithoutShutdown
+			}
 			return nil
 		}
 	}
@@ -175,6 +184,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 		s.ready = true
 		s.rootPaths = rootPathsFromInitialize(initParams)
 		s.settings = applySettings(s.settings, initParams.InitializationOptions)
+		s.client = initParams.Capabilities
 		s.mu.Unlock()
 
 		return initializeResult{
@@ -205,9 +215,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 					},
 					Full: true,
 				},
-				RenameProvider: renameOptions{
-					PrepareProvider: true,
-				},
+				RenameProvider:         s.renameProvider(),
 				SelectionRangeProvider: true,
 				DocumentLinkProvider: documentLinkOptions{
 					ResolveProvider: false,
@@ -1012,7 +1020,7 @@ func (s *Server) workspaceFiles() (map[string]string, map[string]string) {
 
 func (s *Server) codeActions(params codeActionParams) ([]codeAction, error) {
 	doc, ok := s.document(params.TextDocument.URI)
-	if !ok || !codeActionKindAllowed(params.Context.Only, "source.format") {
+	if !ok || !s.clientSupportsCodeActionLiterals() || !codeActionKindAllowed(params.Context.Only, "source.format") {
 		return []codeAction{}, nil
 	}
 
@@ -1036,6 +1044,22 @@ func (s *Server) codeActions(params codeActionParams) ([]codeAction, error) {
 			},
 		},
 	}}, nil
+}
+
+func (s *Server) renameProvider() interface{} {
+	s.mu.Lock()
+	client := s.client
+	s.mu.Unlock()
+	if client.TextDocument.Rename.PrepareSupport {
+		return renameOptions{PrepareProvider: true}
+	}
+	return true
+}
+
+func (s *Server) clientSupportsCodeActionLiterals() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.client.TextDocument.CodeAction.CodeActionLiteralSupport != nil
 }
 
 func codeActionKindAllowed(only []string, kind string) bool {

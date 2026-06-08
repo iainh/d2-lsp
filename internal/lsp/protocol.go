@@ -57,12 +57,29 @@ type rpcError struct {
 }
 
 type initializeParams struct {
-	ProcessID             *int              `json:"processId,omitempty"`
-	ClientInfo            *clientInfo       `json:"clientInfo,omitempty"`
-	RootURI               *string           `json:"rootUri,omitempty"`
-	WorkspaceFolders      []workspaceFolder `json:"workspaceFolders,omitempty"`
-	InitializationOptions interface{}       `json:"initializationOptions,omitempty"`
-	Capabilities          interface{}       `json:"capabilities,omitempty"`
+	ProcessID             *int               `json:"processId,omitempty"`
+	ClientInfo            *clientInfo        `json:"clientInfo,omitempty"`
+	RootURI               *string            `json:"rootUri,omitempty"`
+	WorkspaceFolders      []workspaceFolder  `json:"workspaceFolders,omitempty"`
+	InitializationOptions interface{}        `json:"initializationOptions,omitempty"`
+	Capabilities          clientCapabilities `json:"capabilities,omitempty"`
+}
+
+type clientCapabilities struct {
+	TextDocument textDocumentClientCapabilities `json:"textDocument,omitempty"`
+}
+
+type textDocumentClientCapabilities struct {
+	CodeAction codeActionClientCapabilities `json:"codeAction,omitempty"`
+	Rename     renameClientCapabilities     `json:"rename,omitempty"`
+}
+
+type codeActionClientCapabilities struct {
+	CodeActionLiteralSupport *struct{} `json:"codeActionLiteralSupport,omitempty"`
+}
+
+type renameClientCapabilities struct {
+	PrepareSupport bool `json:"prepareSupport,omitempty"`
 }
 
 type workspaceFolder struct {
@@ -98,7 +115,7 @@ type serverCapabilities struct {
 	HoverProvider              bool                    `json:"hoverProvider,omitempty"`
 	InlayHintProvider          bool                    `json:"inlayHintProvider,omitempty"`
 	SemanticTokensProvider     semanticTokensOptions   `json:"semanticTokensProvider,omitempty"`
-	RenameProvider             renameOptions           `json:"renameProvider,omitempty"`
+	RenameProvider             interface{}             `json:"renameProvider,omitempty"`
 	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
 	DocumentLinkProvider       documentLinkOptions     `json:"documentLinkProvider,omitempty"`
 	CodeActionProvider         bool                    `json:"codeActionProvider,omitempty"`

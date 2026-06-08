@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,9 @@ func TestServerInitializeAdvertisesCapabilities(t *testing.T) {
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  methodInitialize,
-		"params":  map[string]interface{}{},
+		"params": map[string]interface{}{
+			"capabilities": modernClientCapabilitiesForTest(),
+		},
 	}), &output)
 	if err != nil {
 		t.Fatalf("handle initialize: %v", err)
@@ -82,8 +85,9 @@ func TestServerInitializeAdvertisesCapabilities(t *testing.T) {
 	if len(response.Result.Capabilities.SemanticTokensProvider.Legend.TokenTypes) == 0 {
 		t.Fatal("expected semantic token legend")
 	}
-	if !response.Result.Capabilities.RenameProvider.PrepareProvider {
-		t.Fatal("expected prepare rename provider")
+	renameProvider, ok := response.Result.Capabilities.RenameProvider.(map[string]interface{})
+	if !ok || renameProvider["prepareProvider"] != true {
+		t.Fatalf("expected prepare rename provider, got %#v", response.Result.Capabilities.RenameProvider)
 	}
 	if !response.Result.Capabilities.SelectionRangeProvider {
 		t.Fatal("expected selection range provider")
@@ -399,6 +403,46 @@ func TestSuccessfulNilResultIsEncodedAsNullResult(t *testing.T) {
 	}
 }
 
+func TestServeReturnsExitWithoutShutdown(t *testing.T) {
+	server := NewServer()
+	var input bytes.Buffer
+	input.Write(encodeForTest(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodExit,
+	}))
+
+	var output bytes.Buffer
+	err := server.Serve(&input, &output)
+	if !errors.Is(err, ErrExitWithoutShutdown) {
+		t.Fatalf("expected ErrExitWithoutShutdown, got %v", err)
+	}
+}
+
+func TestServeAllowsExitAfterShutdown(t *testing.T) {
+	server := NewServer()
+	var input bytes.Buffer
+	input.Write(encodeForTest(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params":  map[string]interface{}{},
+	}))
+	input.Write(encodeForTest(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodShutdown,
+	}))
+	input.Write(encodeForTest(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodExit,
+	}))
+
+	var output bytes.Buffer
+	if err := server.Serve(&input, &output); err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+}
+
 func TestRequestAfterShutdownReturnsInvalidRequest(t *testing.T) {
 	server := NewServer()
 	var output bytes.Buffer
@@ -438,6 +482,63 @@ func TestRequestAfterShutdownReturnsInvalidRequest(t *testing.T) {
 	}
 	if response.Error == nil || response.Error.Code != errInvalidRequest {
 		t.Fatalf("expected InvalidRequest, got %#v", response.Error)
+	}
+}
+
+func TestInitializeAdvertisesPrepareRenameOnlyWhenSupported(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"capabilities": map[string]interface{}{},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var raw struct {
+		Result struct {
+			Capabilities map[string]json.RawMessage `json:"capabilities"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(message, &raw); err != nil {
+		t.Fatalf("unmarshal initialize response: %v", err)
+	}
+	if string(raw.Result.Capabilities["renameProvider"]) != "true" {
+		t.Fatalf("expected boolean renameProvider, got %s", raw.Result.Capabilities["renameProvider"])
+	}
+
+	server = NewServer()
+	output.Reset()
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"capabilities": map[string]interface{}{
+				"textDocument": map[string]interface{}{
+					"rename": map[string]interface{}{
+						"prepareSupport": true,
+					},
+				},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize with rename prepareSupport: %v", err)
+	}
+	message = readOutputMessage(t, &output)
+	if err := json.Unmarshal(message, &raw); err != nil {
+		t.Fatalf("unmarshal initialize response: %v", err)
+	}
+	if string(raw.Result.Capabilities["renameProvider"]) != `{"prepareProvider":true}` {
+		t.Fatalf("expected rename options, got %s", raw.Result.Capabilities["renameProvider"])
 	}
 }
 
@@ -1203,6 +1304,58 @@ func TestCodeActionReturnsFormatSourceAction(t *testing.T) {
 	edits := action.Edit.Changes["file:///diagram.d2"]
 	if len(edits) != 1 || edits[0].NewText != "x: {y: z}\n" {
 		t.Fatalf("unexpected code action edit %#v", action.Edit)
+	}
+}
+
+func TestCodeActionRequiresLiteralSupport(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"capabilities": map[string]interface{}{},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	server.setDocument(document{URI: "file:///diagram.d2", Version: 1, Text: "x:{y:z}\n"})
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentCodeAction,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///diagram.d2",
+			},
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 0, "character": 0},
+				"end":   map[string]interface{}{"line": 0, "character": 0},
+			},
+			"context": map[string]interface{}{},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle codeAction: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []codeAction `json:"result"`
+		Error  *rpcError    `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal codeAction response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected codeAction error: %#v", response.Error)
+	}
+	if len(response.Result) != 0 {
+		t.Fatalf("expected no code actions without literal support, got %#v", response.Result)
 	}
 }
 
@@ -2564,10 +2717,29 @@ func initialize(t *testing.T, server *Server, output *bytes.Buffer) {
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  methodInitialize,
-		"params":  map[string]interface{}{},
+		"params": map[string]interface{}{
+			"capabilities": modernClientCapabilitiesForTest(),
+		},
 	}), output)
 	if err != nil {
 		t.Fatalf("initialize: %v", err)
+	}
+}
+
+func modernClientCapabilitiesForTest() map[string]interface{} {
+	return map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"codeAction": map[string]interface{}{
+				"codeActionLiteralSupport": map[string]interface{}{
+					"codeActionKind": map[string]interface{}{
+						"valueSet": []string{"source", "source.format"},
+					},
+				},
+			},
+			"rename": map[string]interface{}{
+				"prepareSupport": true,
+			},
+		},
 	}
 }
 
