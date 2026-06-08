@@ -106,3 +106,7 @@ Restart Helix or run `:config-reload`, then check the setup with:
 ```sh
 hx --health d2
 ```
+
+## License
+
+MIT
