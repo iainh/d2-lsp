@@ -40,3 +40,39 @@ func TestSymbolsUsesUTF16Positions(t *testing.T) {
 		t.Fatalf("expected UTF-16 character offset to include emoji width, got %#v", symbols[0].SelectionRange)
 	}
 }
+
+func TestSymbolsIncludeSpreadImports(t *testing.T) {
+	symbols, err := Symbols("file:///diagram.d2", "...@models.user\n")
+	if err != nil {
+		t.Fatalf("symbols: %v", err)
+	}
+	if len(symbols) != 1 {
+		t.Fatalf("expected one symbol, got %#v", symbols)
+	}
+	if symbols[0].Name != "...@models.user" {
+		t.Fatalf("unexpected import symbol name %q", symbols[0].Name)
+	}
+	if symbols[0].Kind != symbolKindFile {
+		t.Fatalf("expected file symbol, got %d", symbols[0].Kind)
+	}
+}
+
+func TestSymbolsIncludeValueImportsAsChildren(t *testing.T) {
+	symbols, err := Symbols("file:///diagram.d2", "service: @models.user\n")
+	if err != nil {
+		t.Fatalf("symbols: %v", err)
+	}
+	if len(symbols) != 1 {
+		t.Fatalf("expected one symbol, got %#v", symbols)
+	}
+	if len(symbols[0].Children) != 1 {
+		t.Fatalf("expected import child symbol, got %#v", symbols[0].Children)
+	}
+	child := symbols[0].Children[0]
+	if child.Name != "@models.user" {
+		t.Fatalf("unexpected import child name %q", child.Name)
+	}
+	if child.Kind != symbolKindFile {
+		t.Fatalf("expected file child symbol, got %d", child.Kind)
+	}
+}

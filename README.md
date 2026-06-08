@@ -15,7 +15,7 @@ Current support:
 - completion from upstream D2 language tooling with enriched detail and documentation
 - document formatting from the upstream D2 formatter
 - code action for applying D2 formatting as a source edit
-- document symbols from the D2 AST
+- document symbols for D2 objects, edges, and imports from the D2 AST
 - workspace symbols from workspace `.d2` files and open buffers
 - folding ranges for nested D2 maps
 - references via upstream D2 reference resolution, including imported workspace files
