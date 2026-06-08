@@ -23,7 +23,7 @@
           pname = "d2-lsp";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-wvOiuukoDAn4ZFRGf/fORT9zSSJtan5ZCZlm3FmzZEQ=";
+          vendorHash = "sha256-kacAb1l5E3/JrF3TReq3HltKGTxBIcUSmDh3IeN0nc8=";
 
           subPackages = [ "cmd/d2-lsp" ];
         };
