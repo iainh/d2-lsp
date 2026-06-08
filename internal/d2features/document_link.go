@@ -25,10 +25,10 @@ func DocumentLinks(path, text string) ([]DocumentLink, error) {
 		}
 	}
 	if ast == nil {
-		return nil, nil
+		return []DocumentLink{}, nil
 	}
 
-	var links []DocumentLink
+	links := []DocumentLink{}
 	collectDocumentLinks(ast, &links)
 	return links, nil
 }

@@ -4,6 +4,9 @@ import "testing"
 
 func TestParseReturnsNoDiagnosticsForValidD2(t *testing.T) {
 	diagnostics := Parse("file:///diagram.d2", "x -> y\n")
+	if diagnostics == nil {
+		t.Fatal("expected empty diagnostics slice, got nil")
+	}
 	if len(diagnostics) != 0 {
 		t.Fatalf("expected no diagnostics, got %#v", diagnostics)
 	}
@@ -52,6 +55,9 @@ func TestParseInFilesUsesImportedFiles(t *testing.T) {
 	}
 
 	diagnostics := ParseInFiles("index.d2", files["index.d2"], files)
+	if diagnostics == nil {
+		t.Fatal("expected empty diagnostics slice, got nil")
+	}
 	if len(diagnostics) != 0 {
 		t.Fatalf("expected no diagnostics, got %#v", diagnostics)
 	}
@@ -83,6 +89,9 @@ func TestParseAllInFilesUsesImportedFiles(t *testing.T) {
 		t.Fatalf("expected diagnostics for %d files, got %d", len(files), len(diagnostics))
 	}
 	for path, pathDiagnostics := range diagnostics {
+		if pathDiagnostics == nil {
+			t.Fatalf("expected empty diagnostics slice for %s, got nil", path)
+		}
 		if len(pathDiagnostics) != 0 {
 			t.Fatalf("expected no diagnostics for %s, got %#v", path, pathDiagnostics)
 		}

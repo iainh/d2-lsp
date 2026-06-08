@@ -45,10 +45,10 @@ func DocumentColors(path, text string) ([]DocumentColor, error) {
 		}
 	}
 	if ast == nil {
-		return nil, nil
+		return []DocumentColor{}, nil
 	}
 
-	var colors []DocumentColor
+	colors := []DocumentColor{}
 	collectDocumentColors(ast, &colors)
 	return colors, nil
 }

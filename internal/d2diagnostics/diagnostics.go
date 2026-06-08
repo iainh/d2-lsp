@@ -79,7 +79,7 @@ func compileDiagnosticsWithFS(path, text string, fs fs.FS) []Diagnostic {
 	}
 	_, _, err := d2compiler.Compile(path, strings.NewReader(text), options)
 	if err == nil {
-		return nil
+		return []Diagnostic{}
 	}
 
 	var pe *d2parser.ParseError

@@ -36,6 +36,9 @@ func TestDocumentLinksIgnoresNonURLValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("document links: %v", err)
 	}
+	if links == nil {
+		t.Fatal("expected empty links slice, got nil")
+	}
 	if len(links) != 0 {
 		t.Fatalf("expected no links, got %#v", links)
 	}
@@ -45,6 +48,9 @@ func TestDocumentLinksToleratesInvalidDocument(t *testing.T) {
 	links, err := DocumentLinks("file:///diagram.d2", "x: {link: https://example.com\n")
 	if err != nil {
 		t.Fatalf("document links: %v", err)
+	}
+	if links == nil {
+		t.Fatal("expected links slice, got nil")
 	}
 	if len(links) > 1 {
 		t.Fatalf("unexpected links %#v", links)

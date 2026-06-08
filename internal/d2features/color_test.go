@@ -36,6 +36,9 @@ func TestDocumentColorsIgnoresNonColorStyleValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("document colors: %v", err)
 	}
+	if colors == nil {
+		t.Fatal("expected empty colors slice, got nil")
+	}
 	if len(colors) != 0 {
 		t.Fatalf("expected no colors, got %#v", colors)
 	}
@@ -45,6 +48,9 @@ func TestDocumentColorsToleratesInvalidDocument(t *testing.T) {
 	colors, err := DocumentColors("file:///diagram.d2", "x: {style.fill: red\n")
 	if err != nil {
 		t.Fatalf("document colors: %v", err)
+	}
+	if colors == nil {
+		t.Fatal("expected colors slice, got nil")
 	}
 	if len(colors) > 1 {
 		t.Fatalf("unexpected colors %#v", colors)
