@@ -25,7 +25,7 @@ Current support:
 - enriched hover for D2 keywords, style keys, and selected values
 - inlay hints for resolved D2 import paths
 - semantic tokens from the D2 AST
-- rename via upstream D2 reference resolution
+- rename via upstream D2 reference resolution with replacement validation
 - selection ranges from the D2 AST
 - document links for D2 `link` and `icon` URL values
 - document colors and color presentations for D2 style color values

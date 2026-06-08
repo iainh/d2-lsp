@@ -456,6 +456,9 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 		if err := json.Unmarshal(params, &rename); err != nil {
 			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
 		}
+		if err := d2features.ValidateRenameName(rename.NewName); err != nil {
+			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
+		}
 
 		doc, ok := s.document(rename.TextDocument.URI)
 		if !ok {

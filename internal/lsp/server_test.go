@@ -1753,6 +1753,48 @@ func TestRenameReturnsWorkspaceEditForReferences(t *testing.T) {
 	}
 }
 
+func TestRenameRejectsInvalidNewName(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{
+		URI:     "file:///diagram.d2",
+		Version: 1,
+		Text:    "x\nx -> y\n",
+	})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentRename,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///diagram.d2",
+			},
+			"position": map[string]interface{}{
+				"line":      1,
+				"character": 0,
+			},
+			"newName": "bad: value",
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle rename: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Error *rpcError `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal rename response: %v", err)
+	}
+	if response.Error == nil || response.Error.Code != errInvalidParams {
+		t.Fatalf("expected invalid params error, got %#v", response.Error)
+	}
+}
+
 func TestRenameReturnsWorkspaceEditForImportedReferences(t *testing.T) {
 	server := NewServer()
 	var output bytes.Buffer
