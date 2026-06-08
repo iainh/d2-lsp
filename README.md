@@ -62,3 +62,47 @@ Run with Nix:
 ```sh
 nix run
 ```
+
+## Helix
+
+Install `d2-lsp` somewhere on your `PATH`:
+
+```sh
+go install ./cmd/d2-lsp
+```
+
+Alternatively, build or install it with Nix:
+
+```sh
+nix build
+nix profile install .
+```
+
+Add this to your Helix `languages.toml`, either globally at `~/.config/helix/languages.toml`
+or per project at `.helix/languages.toml`:
+
+```toml
+[language-server.d2-lsp]
+command = "d2-lsp"
+
+[[language]]
+name = "d2"
+scope = "source.d2"
+file-types = ["d2"]
+comment-token = "#"
+language-servers = ["d2-lsp"]
+auto-format = true
+```
+
+If you want import-path inlay hints, enable them in `~/.config/helix/config.toml`:
+
+```toml
+[editor.lsp]
+display-inlay-hints = true
+```
+
+Restart Helix or run `:config-reload`, then check the setup with:
+
+```sh
+hx --health d2
+```
