@@ -803,6 +803,97 @@ func TestInitializedWorkspaceDiagnosticsUseOpenImportedDocument(t *testing.T) {
 	}
 }
 
+func TestDidChangeWatchedFilesPublishesWorkspaceDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("x: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodWorkspaceDidChangeWatchedFiles,
+		"params": map[string]interface{}{
+			"changes": []map[string]interface{}{
+				{"uri": uriFromPath(diagramPath), "type": 2},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle workspace/didChangeWatchedFiles: %v", err)
+	}
+
+	notification := readDiagnosticsNotification(t, &output)
+	if notification.Params.URI != uriFromPath(diagramPath) {
+		t.Fatalf("unexpected diagnostics uri %q", notification.Params.URI)
+	}
+	if len(notification.Params.Diagnostics) == 0 {
+		t.Fatal("expected workspace diagnostics after watched file change")
+	}
+}
+
+func TestDidChangeWatchedFilesClearsDeletedD2Diagnostics(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("x: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	if err := os.Remove(diagramPath); err != nil {
+		t.Fatalf("remove diagram: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodWorkspaceDidChangeWatchedFiles,
+		"params": map[string]interface{}{
+			"changes": []map[string]interface{}{
+				{"uri": uriFromPath(diagramPath), "type": fileChangeTypeDeleted},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle workspace/didChangeWatchedFiles: %v", err)
+	}
+
+	notification := readDiagnosticsNotification(t, &output)
+	if notification.Params.URI != uriFromPath(diagramPath) {
+		t.Fatalf("unexpected diagnostics uri %q", notification.Params.URI)
+	}
+	if len(notification.Params.Diagnostics) != 0 {
+		t.Fatalf("expected cleared diagnostics for deleted file, got %#v", notification.Params.Diagnostics)
+	}
+}
+
 func TestDidCloseDeletesDocumentAndClearsDiagnostics(t *testing.T) {
 	server := NewServer()
 	var output bytes.Buffer

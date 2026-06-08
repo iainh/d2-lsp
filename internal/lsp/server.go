@@ -49,7 +49,10 @@ const (
 	methodTextDocumentColorPresentation  = "textDocument/colorPresentation"
 	methodWorkspaceSymbol                = "workspace/symbol"
 	methodWorkspaceDidChangeFolders      = "workspace/didChangeWorkspaceFolders"
+	methodWorkspaceDidChangeWatchedFiles = "workspace/didChangeWatchedFiles"
 )
+
+const fileChangeTypeDeleted = 3
 
 const (
 	errParseError           = -32700
@@ -622,6 +625,12 @@ func (s *Server) handleNotification(method string, params json.RawMessage, write
 		}
 		s.changeWorkspaceFolders(change.Event.Added, change.Event.Removed)
 		return nil
+	case methodWorkspaceDidChangeWatchedFiles:
+		var change didChangeWatchedFilesParams
+		if err := json.Unmarshal(params, &change); err != nil {
+			return err
+		}
+		return s.publishWatchedFileDiagnostics(writer, change.Changes)
 	default:
 		return nil
 	}
@@ -917,6 +926,25 @@ func (s *Server) publishWorkspaceDiagnostics(writer io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func (s *Server) publishWatchedFileDiagnostics(writer io.Writer, changes []fileEvent) error {
+	for _, change := range changes {
+		if change.Type != fileChangeTypeDeleted || filepath.Ext(pathFromURI(change.URI)) != ".d2" {
+			continue
+		}
+		if err := writeJSON(writer, notificationMessage{
+			JSONRPC: jsonRPCVersion,
+			Method:  methodTextDocumentPublishDiagnostic,
+			Params: publishDiagnosticsParams{
+				URI:         change.URI,
+				Diagnostics: []d2diagnostics.Diagnostic{},
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return s.publishWorkspaceDiagnostics(writer)
 }
 
 func endPosition(text string) position {

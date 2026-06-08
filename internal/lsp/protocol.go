@@ -195,6 +195,15 @@ type workspaceFoldersChangeEvent struct {
 	Removed []workspaceFolder `json:"removed"`
 }
 
+type didChangeWatchedFilesParams struct {
+	Changes []fileEvent `json:"changes"`
+}
+
+type fileEvent struct {
+	URI  string `json:"uri"`
+	Type int    `json:"type"`
+}
+
 type completionParams struct {
 	TextDocument textDocumentIdentifier `json:"textDocument"`
 	Position     position               `json:"position"`
