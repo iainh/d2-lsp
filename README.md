@@ -29,6 +29,7 @@ Current support:
 - selection ranges from the D2 AST
 - document links for D2 `link` and `icon` URL values
 - document colors and color presentations for D2 style color values
+- `workspace/executeCommand` support for rendering open D2 documents to SVG with `d2.renderSvg`
 
 ## Development
 

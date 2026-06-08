@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/iainh/d2-lsp/internal/d2features"
@@ -92,6 +93,9 @@ func TestServerInitializeAdvertisesCapabilities(t *testing.T) {
 	}
 	if !response.Result.Capabilities.CodeActionProvider {
 		t.Fatal("expected code action provider")
+	}
+	if len(response.Result.Capabilities.ExecuteCommandProvider.Commands) == 0 {
+		t.Fatal("expected execute command provider")
 	}
 	if !response.Result.Capabilities.WorkspaceSymbolProvider {
 		t.Fatal("expected workspace symbol provider")
@@ -1558,6 +1562,54 @@ func TestWorkspaceSymbolUsesOpenDocumentOverDisk(t *testing.T) {
 	}
 	if response.Result[0].Name != "buffer" {
 		t.Fatalf("expected open-buffer symbol, got %#v", response.Result[0])
+	}
+}
+
+func TestExecuteCommandRendersSVG(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{
+		URI:     "file:///diagram.d2",
+		Version: 1,
+		Text:    "x -> y\n",
+	})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodWorkspaceExecuteCommand,
+		"params": map[string]interface{}{
+			"command": commandRenderSVG,
+			"arguments": []map[string]interface{}{
+				{"textDocument": map[string]interface{}{"uri": "file:///diagram.d2"}},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle executeCommand: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result renderSVGResult `json:"result"`
+		Error  *rpcError       `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal executeCommand response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected executeCommand error: %#v", response.Error)
+	}
+	if response.Result.URI != "file:///diagram.d2" {
+		t.Fatalf("unexpected render uri %q", response.Result.URI)
+	}
+	if response.Result.MimeType != "image/svg+xml" {
+		t.Fatalf("unexpected render mime type %q", response.Result.MimeType)
+	}
+	if !strings.Contains(response.Result.Content, "<svg") {
+		t.Fatalf("expected svg content, got %q", response.Result.Content[:min(len(response.Result.Content), 80)])
 	}
 }
 

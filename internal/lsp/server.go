@@ -51,11 +51,14 @@ const (
 	methodTextDocumentColorPresentation  = "textDocument/colorPresentation"
 	methodTextDocumentCodeAction         = "textDocument/codeAction"
 	methodWorkspaceSymbol                = "workspace/symbol"
+	methodWorkspaceExecuteCommand        = "workspace/executeCommand"
 	methodWorkspaceDidChangeFolders      = "workspace/didChangeWorkspaceFolders"
 	methodWorkspaceDidChangeWatchedFiles = "workspace/didChangeWatchedFiles"
 )
 
 const fileChangeTypeDeleted = 3
+
+const commandRenderSVG = "d2.renderSvg"
 
 const (
 	errParseError           = -32700
@@ -210,6 +213,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 					ResolveProvider: false,
 				},
 				CodeActionProvider:      true,
+				ExecuteCommandProvider:  executeCommandOptions{Commands: []string{commandRenderSVG}},
 				WorkspaceSymbolProvider: true,
 				Workspace: workspaceOptions{
 					WorkspaceFolders: workspaceFoldersServerCapabilities{
@@ -570,6 +574,16 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 			return nil, &rpcError{Code: errInternalError, Message: err.Error()}
 		}
 		return symbols, nil
+	case methodWorkspaceExecuteCommand:
+		var command executeCommandParams
+		if err := json.Unmarshal(params, &command); err != nil {
+			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
+		}
+		result, err := s.executeCommand(command)
+		if err != nil {
+			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
+		}
+		return result, nil
 	case methodShutdown:
 		s.mu.Lock()
 		s.shutdown = true
@@ -1034,6 +1048,55 @@ func codeActionKindAllowed(only []string, kind string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) executeCommand(params executeCommandParams) (interface{}, error) {
+	switch params.Command {
+	case commandRenderSVG:
+		return s.renderSVGCommand(params.Arguments)
+	default:
+		return nil, fmt.Errorf("unsupported command: %s", params.Command)
+	}
+}
+
+func (s *Server) renderSVGCommand(args []json.RawMessage) (renderSVGResult, error) {
+	uri, err := renderSVGCommandURI(args)
+	if err != nil {
+		return renderSVGResult{}, err
+	}
+	doc, ok := s.document(uri)
+	if !ok {
+		return renderSVGResult{}, fmt.Errorf("document is not open: %s", uri)
+	}
+
+	path, files, _ := s.documentFilesystem(doc)
+	svg, err := d2features.RenderSVG(path, doc.Text, files)
+	if err != nil {
+		return renderSVGResult{}, err
+	}
+	return renderSVGResult{
+		URI:      uri,
+		MimeType: "image/svg+xml",
+		Content:  svg,
+	}, nil
+}
+
+func renderSVGCommandURI(args []json.RawMessage) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("missing render command arguments")
+	}
+
+	var commandArgs renderSVGCommandArgs
+	if err := json.Unmarshal(args[0], &commandArgs); err != nil {
+		return "", err
+	}
+	if commandArgs.TextDocument != nil && commandArgs.TextDocument.URI != "" {
+		return commandArgs.TextDocument.URI, nil
+	}
+	if commandArgs.URI != "" {
+		return commandArgs.URI, nil
+	}
+	return "", fmt.Errorf("missing text document uri")
 }
 
 func appendWorkspaceSymbols(out *[]workspaceSymbol, uri, query string, symbols []d2features.DocumentSymbol) {

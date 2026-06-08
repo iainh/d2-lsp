@@ -102,6 +102,7 @@ type serverCapabilities struct {
 	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
 	DocumentLinkProvider       documentLinkOptions     `json:"documentLinkProvider,omitempty"`
 	CodeActionProvider         bool                    `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider     executeCommandOptions   `json:"executeCommandProvider,omitempty"`
 	WorkspaceSymbolProvider    bool                    `json:"workspaceSymbolProvider,omitempty"`
 	Workspace                  workspaceOptions        `json:"workspace,omitempty"`
 	ColorProvider              bool                    `json:"colorProvider,omitempty"`
@@ -147,6 +148,10 @@ type renameOptions struct {
 
 type documentLinkOptions struct {
 	ResolveProvider bool `json:"resolveProvider,omitempty"`
+}
+
+type executeCommandOptions struct {
+	Commands []string `json:"commands"`
 }
 
 type textDocumentItem struct {
@@ -312,6 +317,16 @@ type workspaceSymbolParams struct {
 	Query string `json:"query"`
 }
 
+type executeCommandParams struct {
+	Command   string            `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+type renderSVGCommandArgs struct {
+	TextDocument *textDocumentIdentifier `json:"textDocument,omitempty"`
+	URI          string                  `json:"uri,omitempty"`
+}
+
 type textDocumentContentChangeEvent struct {
 	Range       *rangePosition `json:"range,omitempty"`
 	RangeLength *int           `json:"rangeLength,omitempty"`
@@ -353,6 +368,12 @@ type workspaceSymbol struct {
 	Name     string   `json:"name"`
 	Kind     int      `json:"kind"`
 	Location location `json:"location"`
+}
+
+type renderSVGResult struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType"`
+	Content  string `json:"content"`
 }
 
 type location struct {
