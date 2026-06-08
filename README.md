@@ -14,6 +14,7 @@ Current support:
 - watched file changes refresh workspace diagnostics
 - completion from upstream D2 language tooling
 - document formatting from the upstream D2 formatter
+- code action for applying D2 formatting as a source edit
 - document symbols from the D2 AST
 - workspace symbols from workspace `.d2` files and open buffers
 - folding ranges for nested D2 maps

@@ -100,6 +100,7 @@ type serverCapabilities struct {
 	RenameProvider             renameOptions           `json:"renameProvider,omitempty"`
 	SelectionRangeProvider     bool                    `json:"selectionRangeProvider,omitempty"`
 	DocumentLinkProvider       documentLinkOptions     `json:"documentLinkProvider,omitempty"`
+	CodeActionProvider         bool                    `json:"codeActionProvider,omitempty"`
 	WorkspaceSymbolProvider    bool                    `json:"workspaceSymbolProvider,omitempty"`
 	Workspace                  workspaceOptions        `json:"workspace,omitempty"`
 	ColorProvider              bool                    `json:"colorProvider,omitempty"`
@@ -280,6 +281,17 @@ type documentColorParams struct {
 	TextDocument textDocumentIdentifier `json:"textDocument"`
 }
 
+type codeActionParams struct {
+	TextDocument textDocumentIdentifier `json:"textDocument"`
+	Range        rangePosition          `json:"range"`
+	Context      codeActionContext      `json:"context"`
+}
+
+type codeActionContext struct {
+	Diagnostics []d2diagnostics.Diagnostic `json:"diagnostics"`
+	Only        []string                   `json:"only,omitempty"`
+}
+
 type colorPresentationParams struct {
 	TextDocument textDocumentIdentifier `json:"textDocument"`
 	Color        d2features.Color       `json:"color"`
@@ -319,6 +331,12 @@ type completionList struct {
 
 type workspaceEdit struct {
 	Changes map[string][]textEdit `json:"changes,omitempty"`
+}
+
+type codeAction struct {
+	Title string        `json:"title"`
+	Kind  string        `json:"kind,omitempty"`
+	Edit  workspaceEdit `json:"edit,omitempty"`
 }
 
 type workspaceSymbol struct {

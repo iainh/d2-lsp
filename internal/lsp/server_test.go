@@ -87,6 +87,9 @@ func TestServerInitializeAdvertisesCapabilities(t *testing.T) {
 	if response.Result.Capabilities.DocumentLinkProvider.ResolveProvider {
 		t.Fatal("expected document link resolve provider to be disabled")
 	}
+	if !response.Result.Capabilities.CodeActionProvider {
+		t.Fatal("expected code action provider")
+	}
 	if !response.Result.Capabilities.WorkspaceSymbolProvider {
 		t.Fatal("expected workspace symbol provider")
 	}
@@ -1049,6 +1052,100 @@ func TestFormattingReturnsNoEditsForInvalidDocument(t *testing.T) {
 	}
 	if len(response.Result) != 0 {
 		t.Fatalf("expected no edits, got %#v", response.Result)
+	}
+}
+
+func TestCodeActionReturnsFormatSourceAction(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{URI: "file:///diagram.d2", Version: 1, Text: "x:{y:z}\n"})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentCodeAction,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///diagram.d2",
+			},
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 0, "character": 0},
+				"end":   map[string]interface{}{"line": 0, "character": 0},
+			},
+			"context": map[string]interface{}{},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle codeAction: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []codeAction `json:"result"`
+		Error  *rpcError    `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal codeAction response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected codeAction error: %#v", response.Error)
+	}
+	if len(response.Result) != 1 {
+		t.Fatalf("expected one code action, got %#v", response.Result)
+	}
+	action := response.Result[0]
+	if action.Title != "Format D2 document" || action.Kind != "source.format" {
+		t.Fatalf("unexpected code action %#v", action)
+	}
+	edits := action.Edit.Changes["file:///diagram.d2"]
+	if len(edits) != 1 || edits[0].NewText != "x: {y: z}\n" {
+		t.Fatalf("unexpected code action edit %#v", action.Edit)
+	}
+}
+
+func TestCodeActionHonorsOnlyFilter(t *testing.T) {
+	server := NewServer()
+	var output bytes.Buffer
+	initialize(t, server, &output)
+	server.setDocument(document{URI: "file:///diagram.d2", Version: 1, Text: "x:{y:z}\n"})
+	output.Reset()
+
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodTextDocumentCodeAction,
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file:///diagram.d2",
+			},
+			"range": map[string]interface{}{
+				"start": map[string]interface{}{"line": 0, "character": 0},
+				"end":   map[string]interface{}{"line": 0, "character": 0},
+			},
+			"context": map[string]interface{}{
+				"only": []string{"quickfix"},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle codeAction: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []codeAction `json:"result"`
+		Error  *rpcError    `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal codeAction response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected codeAction error: %#v", response.Error)
+	}
+	if len(response.Result) != 0 {
+		t.Fatalf("expected no code actions, got %#v", response.Result)
 	}
 }
 

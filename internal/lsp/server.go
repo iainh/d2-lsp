@@ -47,6 +47,7 @@ const (
 	methodTextDocumentDocumentLink       = "textDocument/documentLink"
 	methodTextDocumentDocumentColor      = "textDocument/documentColor"
 	methodTextDocumentColorPresentation  = "textDocument/colorPresentation"
+	methodTextDocumentCodeAction         = "textDocument/codeAction"
 	methodWorkspaceSymbol                = "workspace/symbol"
 	methodWorkspaceDidChangeFolders      = "workspace/didChangeWorkspaceFolders"
 	methodWorkspaceDidChangeWatchedFiles = "workspace/didChangeWatchedFiles"
@@ -192,6 +193,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 				DocumentLinkProvider: documentLinkOptions{
 					ResolveProvider: false,
 				},
+				CodeActionProvider:      true,
 				WorkspaceSymbolProvider: true,
 				Workspace: workspaceOptions{
 					WorkspaceFolders: workspaceFoldersServerCapabilities{
@@ -510,6 +512,17 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 		}
 
 		return d2features.ColorPresentations(colorPresentation.Color, featureRange(colorPresentation.Range)), nil
+	case methodTextDocumentCodeAction:
+		var codeActionParams codeActionParams
+		if err := json.Unmarshal(params, &codeActionParams); err != nil {
+			return nil, &rpcError{Code: errInvalidParams, Message: err.Error()}
+		}
+
+		actions, err := s.codeActions(codeActionParams)
+		if err != nil {
+			return nil, &rpcError{Code: errInternalError, Message: err.Error()}
+		}
+		return actions, nil
 	case methodWorkspaceSymbol:
 		var workspaceSymbol workspaceSymbolParams
 		if err := json.Unmarshal(params, &workspaceSymbol); err != nil {
@@ -863,6 +876,46 @@ func (s *Server) workspaceFiles() (map[string]string, map[string]string) {
 		uriByPath[path] = doc.URI
 	}
 	return files, uriByPath
+}
+
+func (s *Server) codeActions(params codeActionParams) ([]codeAction, error) {
+	doc, ok := s.document(params.TextDocument.URI)
+	if !ok || !codeActionKindAllowed(params.Context.Only, "source.format") {
+		return []codeAction{}, nil
+	}
+
+	formatted, changed, err := d2features.Format(doc.Text)
+	if err != nil || !changed {
+		return []codeAction{}, err
+	}
+
+	return []codeAction{{
+		Title: "Format D2 document",
+		Kind:  "source.format",
+		Edit: workspaceEdit{
+			Changes: map[string][]textEdit{
+				doc.URI: {{
+					Range: rangePosition{
+						Start: position{Line: 0, Character: 0},
+						End:   endPosition(doc.Text),
+					},
+					NewText: formatted,
+				}},
+			},
+		},
+	}}, nil
+}
+
+func codeActionKindAllowed(only []string, kind string) bool {
+	if len(only) == 0 {
+		return true
+	}
+	for _, allowed := range only {
+		if allowed == kind || strings.HasPrefix(kind, allowed+".") {
+			return true
+		}
+	}
+	return false
 }
 
 func appendWorkspaceSymbols(out *[]workspaceSymbol, uri, query string, symbols []d2features.DocumentSymbol) {
