@@ -977,7 +977,7 @@ func (s *Server) workspaceSymbols(query string) ([]workspaceSymbol, error) {
 	}
 	sort.Strings(paths)
 
-	var symbols []workspaceSymbol
+	symbols := []workspaceSymbol{}
 	for _, path := range paths {
 		docSymbols, err := d2features.Symbols(path, files[path])
 		if err != nil {

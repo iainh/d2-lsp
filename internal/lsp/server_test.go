@@ -1361,6 +1361,59 @@ func TestWorkspaceSymbolReturnsWorkspaceSymbols(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSymbolReturnsEmptyArrayWhenNoSymbolsMatch(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("server: {shape: rectangle}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodWorkspaceSymbol,
+		"params": map[string]interface{}{
+			"query": "missing",
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle workspace/symbol: %v", err)
+	}
+
+	message := readOutputMessage(t, &output)
+	var response struct {
+		Result []workspaceSymbol `json:"result"`
+		Error  *rpcError         `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(message, &response); err != nil {
+		t.Fatalf("unmarshal workspace/symbol response: %v", err)
+	}
+	if response.Error != nil {
+		t.Fatalf("unexpected workspace/symbol error: %#v", response.Error)
+	}
+	if response.Result == nil {
+		t.Fatal("expected empty workspace symbol slice, got nil")
+	}
+	if len(response.Result) != 0 {
+		t.Fatalf("expected no symbols, got %#v", response.Result)
+	}
+}
+
 func TestWorkspaceSymbolUsesWorkspaceFolders(t *testing.T) {
 	rootA := t.TempDir()
 	rootB := t.TempDir()

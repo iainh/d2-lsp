@@ -38,6 +38,9 @@ func TestReferencesReturnsEmptyWhenNoKeyAtPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("references: %v", err)
 	}
+	if locations == nil {
+		t.Fatal("expected empty locations slice, got nil")
+	}
 	if len(locations) != 0 {
 		t.Fatalf("expected no locations, got %#v", locations)
 	}

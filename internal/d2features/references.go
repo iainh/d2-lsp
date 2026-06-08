@@ -33,7 +33,7 @@ func References(path, text string, line, character int, includeDeclaration bool)
 func ReferencesInFiles(defaultURI, path string, fs map[string]string, uriByPath map[string]string, line, character int, includeDeclaration bool) ([]Location, error) {
 	text, ok := fs[path]
 	if !ok {
-		return nil, nil
+		return []Location{}, nil
 	}
 
 	locations, err := referenceLocations(defaultURI, path, text, fs, uriByPath, line, character)
@@ -95,7 +95,7 @@ func referenceLocations(defaultURI, path, text string, fs map[string]string, uri
 	pos := d2ast.Position{Line: line, Column: character, Byte: -1}
 	key, ok, err := keyAtPosition(path, text, pos)
 	if err != nil || !ok {
-		return nil, err
+		return []Location{}, err
 	}
 
 	boardPath, err := d2lsp.GetBoardAtPosition(text, pos)
