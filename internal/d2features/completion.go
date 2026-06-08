@@ -1,12 +1,18 @@
 package d2features
 
-import "oss.terrastruct.com/d2/d2lsp"
+import (
+	"strings"
+
+	"oss.terrastruct.com/d2/d2lsp"
+	"oss.terrastruct.com/d2/d2target"
+)
 
 type CompletionItem struct {
-	Label      string `json:"label"`
-	Kind       int    `json:"kind,omitempty"`
-	Detail     string `json:"detail,omitempty"`
-	InsertText string `json:"insertText,omitempty"`
+	Label         string         `json:"label"`
+	Kind          int            `json:"kind,omitempty"`
+	Detail        string         `json:"detail,omitempty"`
+	Documentation *MarkupContent `json:"documentation,omitempty"`
+	InsertText    string         `json:"insertText,omitempty"`
 }
 
 const (
@@ -23,12 +29,14 @@ func Complete(text string, line, character int) ([]CompletionItem, error) {
 
 	completions := make([]CompletionItem, 0, len(items))
 	for _, item := range items {
-		completions = append(completions, CompletionItem{
+		completion := CompletionItem{
 			Label:      item.Label,
 			Kind:       completionKind(item.Kind),
 			Detail:     item.Detail,
 			InsertText: item.InsertText,
-		})
+		}
+		enrichCompletionItem(&completion)
+		completions = append(completions, completion)
 	}
 	return completions, nil
 }
@@ -43,5 +51,33 @@ func completionKind(kind d2lsp.CompletionKind) int {
 		return completionItemKindValue
 	default:
 		return completionItemKindKeyword
+	}
+}
+
+func enrichCompletionItem(item *CompletionItem) {
+	label := strings.ToLower(item.Label)
+	switch {
+	case styleHoverDescriptions[label] != "":
+		if item.Detail == "" {
+			item.Detail = "D2 style key"
+		}
+		item.Documentation = completionDocumentation(styleHoverDescriptions[label])
+	case keywordHoverDescriptions[label] != "":
+		if item.Detail == "" {
+			item.Detail = "D2 keyword"
+		}
+		item.Documentation = completionDocumentation(keywordHoverDescriptions[label])
+	case d2target.IsShape(label):
+		if item.Detail == "" {
+			item.Detail = "D2 shape"
+		}
+		item.Documentation = completionDocumentation("`" + label + "` is a D2 shape.")
+	}
+}
+
+func completionDocumentation(value string) *MarkupContent {
+	return &MarkupContent{
+		Kind:  markupKindMarkdown,
+		Value: value,
 	}
 }

@@ -12,7 +12,7 @@ Current support:
 - publish syntax and semantic diagnostics from upstream D2 parser/compiler, including imported workspace files
 - workspace diagnostic scan after initialization
 - watched file changes refresh workspace diagnostics
-- completion from upstream D2 language tooling
+- completion from upstream D2 language tooling with enriched detail and documentation
 - document formatting from the upstream D2 formatter
 - code action for applying D2 formatting as a source edit
 - document symbols from the D2 AST
