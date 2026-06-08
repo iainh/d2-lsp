@@ -22,6 +22,36 @@ type MarkupContent struct {
 
 const markupKindMarkdown = "markdown"
 
+var keywordHoverDescriptions = map[string]string{
+	"direction":    "`direction` controls the diagram layout direction. Common values are `up`, `down`, `left`, and `right`.",
+	"label":        "`label` sets the text displayed for a shape, connection, or board item.",
+	"tooltip":      "`tooltip` adds hover text to rendered diagrams that support tooltips.",
+	"link":         "`link` attaches a URL or board path to a shape or connection.",
+	"icon":         "`icon` sets an image URL used as the visual icon for a shape.",
+	"shape":        "`shape` selects the visual form for an object, such as `rectangle`, `circle`, or `sql_table`.",
+	"near":         "`near` positions an object near another object or a supported placement constant.",
+	"style":        "`style` groups visual settings such as fill, stroke, opacity, and font size.",
+	"classes":      "`classes` declares reusable style classes that can be applied with `class`.",
+	"class":        "`class` applies a reusable class declared under `classes`.",
+	"vars":         "`vars` declares variables that can be referenced elsewhere in the diagram.",
+	"grid-rows":    "`grid-rows` sets the number of rows in a grid diagram.",
+	"grid-columns": "`grid-columns` sets the number of columns in a grid diagram.",
+}
+
+var styleHoverDescriptions = map[string]string{
+	"fill":          "`fill` sets the interior color for a shape.",
+	"stroke":        "`stroke` sets the outline color for a shape or connection.",
+	"stroke-width":  "`stroke-width` sets outline thickness from 0 to 15.",
+	"stroke-dash":   "`stroke-dash` controls dashed outlines or connections.",
+	"opacity":       "`opacity` sets transparency from 0.0 to 1.0.",
+	"fill-pattern":  "`fill-pattern` sets a texture such as `dots`, `lines`, or `grain`.",
+	"font-size":     "`font-size` sets label text size.",
+	"font-color":    "`font-color` sets label text color.",
+	"border-radius": "`border-radius` rounds rectangle corners.",
+	"shadow":        "`shadow` toggles a drop shadow.",
+	"3d":            "`3d` toggles supported three-dimensional shape styling.",
+}
+
 func HoverAt(path, text string, line, character int) (*Hover, error) {
 	pos := d2ast.Position{Line: line, Column: character, Byte: -1}
 	ast, err := d2parser.Parse(path, strings.NewReader(text), &d2parser.ParseOptions{
@@ -95,6 +125,12 @@ func hoverInMapKey(mk *d2ast.Key, pos d2ast.Position) *Hover {
 
 func keywordHover(name string) (string, bool) {
 	lower := strings.ToLower(name)
+	if text, ok := keywordHoverDescriptions[lower]; ok {
+		return text, true
+	}
+	if text, ok := styleHoverDescriptions[lower]; ok {
+		return text, true
+	}
 	if _, ok := d2ast.StyleKeywords[lower]; ok {
 		return fmt.Sprintf("`%s` is a D2 style keyword. Use it under `style` or with dotted style syntax.", lower), true
 	}

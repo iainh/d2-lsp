@@ -31,6 +31,32 @@ func TestHoverAtReturnsShapeValueHover(t *testing.T) {
 	}
 }
 
+func TestHoverAtReturnsSpecificKeywordHover(t *testing.T) {
+	hover, err := HoverAt("file:///diagram.d2", "x: {link: https://example.com}\n", 0, len("x: {li"))
+	if err != nil {
+		t.Fatalf("hover: %v", err)
+	}
+	if hover == nil {
+		t.Fatal("expected hover")
+	}
+	if hover.Contents.Value != "`link` attaches a URL or board path to a shape or connection." {
+		t.Fatalf("unexpected hover content %q", hover.Contents.Value)
+	}
+}
+
+func TestHoverAtReturnsSpecificStyleHover(t *testing.T) {
+	hover, err := HoverAt("file:///diagram.d2", "x.style.opacity: 0.5\n", 0, len("x.style.opa"))
+	if err != nil {
+		t.Fatalf("hover: %v", err)
+	}
+	if hover == nil {
+		t.Fatal("expected hover")
+	}
+	if hover.Contents.Value != "`opacity` sets transparency from 0.0 to 1.0." {
+		t.Fatalf("unexpected hover content %q", hover.Contents.Value)
+	}
+}
+
 func TestHoverAtReturnsNilWithoutKnownHover(t *testing.T) {
 	hover, err := HoverAt("file:///diagram.d2", "x -> y\n", 0, 0)
 	if err != nil {
