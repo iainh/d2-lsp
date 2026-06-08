@@ -114,6 +114,13 @@ func (s *Server) Serve(reader io.Reader, writer io.Writer) error {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
+			var charsetErr unsupportedContentCharsetError
+			if errors.As(err, &charsetErr) {
+				if err := writeError(writer, nullID, errParseError, charsetErr.Error()); err != nil {
+					return err
+				}
+				continue
+			}
 			return err
 		}
 

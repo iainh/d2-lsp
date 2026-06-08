@@ -443,6 +443,65 @@ func TestServeAllowsExitAfterShutdown(t *testing.T) {
 	}
 }
 
+func TestServeRespondsToUnsupportedContentTypeCharset(t *testing.T) {
+	server := NewServer()
+	var input bytes.Buffer
+	input.Write(encodeForTestWithHeader(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params":  map[string]interface{}{},
+	}, "Content-Type: application/vscode-jsonrpc; charset=utf-16\r\n"))
+	input.Write(encodeForTest(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  methodInitialize,
+		"params":  map[string]interface{}{},
+	}))
+
+	var output bytes.Buffer
+	if err := server.Serve(&input, &output); err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+
+	outputReader := bufio.NewReader(bytes.NewReader(output.Bytes()))
+	first, err := readMessage(outputReader)
+	if err != nil {
+		t.Fatalf("read first response: %v", err)
+	}
+	var errorResponse struct {
+		ID    json.RawMessage `json:"id"`
+		Error *rpcError       `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(first, &errorResponse); err != nil {
+		t.Fatalf("unmarshal first response: %v", err)
+	}
+	if string(errorResponse.ID) != "null" {
+		t.Fatalf("expected null id, got %s", errorResponse.ID)
+	}
+	if errorResponse.Error == nil || errorResponse.Error.Code != errParseError {
+		t.Fatalf("expected parse error response, got %#v", errorResponse.Error)
+	}
+
+	second, err := readMessage(outputReader)
+	if err != nil {
+		t.Fatalf("read second response: %v", err)
+	}
+	var initializeResponse struct {
+		ID     int              `json:"id"`
+		Result initializeResult `json:"result"`
+	}
+	if err := json.Unmarshal(second, &initializeResponse); err != nil {
+		t.Fatalf("unmarshal second response: %v", err)
+	}
+	if initializeResponse.ID != 2 {
+		t.Fatalf("expected request id 2, got %d", initializeResponse.ID)
+	}
+	if initializeResponse.Result.ServerInfo.Name != "d2-lsp" {
+		t.Fatalf("expected initialize response after charset error, got %#v", initializeResponse.Result)
+	}
+}
+
 func TestRequestAfterShutdownReturnsInvalidRequest(t *testing.T) {
 	server := NewServer()
 	var output bytes.Buffer
