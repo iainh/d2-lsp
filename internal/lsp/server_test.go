@@ -761,6 +761,43 @@ func TestInitializedPublishesWorkspaceDiagnostics(t *testing.T) {
 	}
 }
 
+func TestInitializedHonorsDiagnosticsConfiguration(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("x: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+			"initializationOptions": map[string]interface{}{
+				"diagnosticsOnInitialize": false,
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodInitialized,
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle initialized: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("expected no initialized diagnostics, got %q", output.String())
+	}
+}
+
 func TestInitializedWorkspaceDiagnosticsUseOpenImportedDocument(t *testing.T) {
 	root := t.TempDir()
 	indexPath := filepath.Join(root, "index.d2")
@@ -806,6 +843,63 @@ func TestInitializedWorkspaceDiagnosticsUseOpenImportedDocument(t *testing.T) {
 	}
 	if len(notification.Params.Diagnostics) != 0 {
 		t.Fatalf("expected open import buffer to suppress disk diagnostics, got %#v", notification.Params.Diagnostics)
+	}
+}
+
+func TestDidChangeConfigurationUpdatesDiagnosticsSettings(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("x: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodWorkspaceDidChangeConfig,
+		"params": map[string]interface{}{
+			"settings": map[string]interface{}{
+				"d2-lsp": map[string]interface{}{
+					"diagnosticsOnWatchedFiles": false,
+				},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle workspace/didChangeConfiguration: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("expected no response to configuration change, got %q", output.String())
+	}
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodWorkspaceDidChangeWatchedFiles,
+		"params": map[string]interface{}{
+			"changes": []map[string]interface{}{
+				{"uri": uriFromPath(diagramPath), "type": 2},
+			},
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle workspace/didChangeWatchedFiles: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("expected watched diagnostics to be disabled, got %q", output.String())
 	}
 }
 

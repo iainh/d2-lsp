@@ -206,6 +206,10 @@ type fileEvent struct {
 	Type int    `json:"type"`
 }
 
+type didChangeConfigurationParams struct {
+	Settings interface{} `json:"settings"`
+}
+
 type completionParams struct {
 	TextDocument textDocumentIdentifier `json:"textDocument"`
 	Position     position               `json:"position"`

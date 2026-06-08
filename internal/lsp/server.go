@@ -27,6 +27,7 @@ const (
 	methodInitialized                    = "initialized"
 	methodShutdown                       = "shutdown"
 	methodExit                           = "exit"
+	methodWorkspaceDidChangeConfig       = "workspace/didChangeConfiguration"
 	methodTextDocumentDidOpen            = "textDocument/didOpen"
 	methodTextDocumentDidChange          = "textDocument/didChange"
 	methodTextDocumentDidClose           = "textDocument/didClose"
@@ -72,7 +73,18 @@ type Server struct {
 	ready     bool
 	shutdown  bool
 	rootPaths []string
+	settings  serverSettings
 	documents map[string]document
+}
+
+type serverSettings struct {
+	DiagnosticsOnInitialize   bool
+	DiagnosticsOnWatchedFiles bool
+}
+
+type serverSettingsPatch struct {
+	DiagnosticsOnInitialize   *bool `json:"diagnosticsOnInitialize,omitempty"`
+	DiagnosticsOnWatchedFiles *bool `json:"diagnosticsOnWatchedFiles,omitempty"`
 }
 
 type document struct {
@@ -83,6 +95,7 @@ type document struct {
 
 func NewServer() *Server {
 	return &Server{
+		settings:  defaultServerSettings(),
 		documents: make(map[string]document),
 	}
 }
@@ -158,6 +171,7 @@ func (s *Server) handleRequest(method string, params json.RawMessage) (interface
 		s.mu.Lock()
 		s.ready = true
 		s.rootPaths = rootPathsFromInitialize(initParams)
+		s.settings = applySettings(s.settings, initParams.InitializationOptions)
 		s.mu.Unlock()
 
 		return initializeResult{
@@ -585,7 +599,17 @@ func (s *Server) handleNotification(method string, params json.RawMessage, write
 
 	switch method {
 	case methodInitialized:
+		if !s.settingsSnapshot().DiagnosticsOnInitialize {
+			return nil
+		}
 		return s.publishWorkspaceDiagnostics(writer)
+	case methodWorkspaceDidChangeConfig:
+		var change didChangeConfigurationParams
+		if err := json.Unmarshal(params, &change); err != nil {
+			return err
+		}
+		s.updateSettings(change.Settings)
+		return nil
 	case methodTextDocumentDidOpen:
 		var open didOpenTextDocumentParams
 		if err := json.Unmarshal(params, &open); err != nil {
@@ -662,6 +686,9 @@ func (s *Server) handleNotification(method string, params json.RawMessage, write
 		if err := json.Unmarshal(params, &change); err != nil {
 			return err
 		}
+		if !s.settingsSnapshot().DiagnosticsOnWatchedFiles {
+			return nil
+		}
 		return s.publishWatchedFileDiagnostics(writer, change.Changes)
 	default:
 		return nil
@@ -730,12 +757,81 @@ func (s *Server) document(uri string) (document, bool) {
 	return doc, ok
 }
 
+func (s *Server) settingsSnapshot() serverSettings {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings
+}
+
+func (s *Server) updateSettings(value interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settings = applySettings(s.settings, value)
+}
+
 func (s *Server) documentFilesystem(active document) (string, map[string]string, map[string]string) {
 	activePath := pathFromURI(active.URI)
 	fs, uriByPath := s.workspaceFiles()
 	fs[activePath] = active.Text
 	uriByPath[activePath] = active.URI
 	return activePath, fs, uriByPath
+}
+
+func defaultServerSettings() serverSettings {
+	return serverSettings{
+		DiagnosticsOnInitialize:   true,
+		DiagnosticsOnWatchedFiles: true,
+	}
+}
+
+func applySettings(current serverSettings, value interface{}) serverSettings {
+	patch, ok := settingsPatchFromValue(value)
+	if !ok {
+		return current
+	}
+	if patch.DiagnosticsOnInitialize != nil {
+		current.DiagnosticsOnInitialize = *patch.DiagnosticsOnInitialize
+	}
+	if patch.DiagnosticsOnWatchedFiles != nil {
+		current.DiagnosticsOnWatchedFiles = *patch.DiagnosticsOnWatchedFiles
+	}
+	return current
+}
+
+func settingsPatchFromValue(value interface{}) (serverSettingsPatch, bool) {
+	if value == nil {
+		return serverSettingsPatch{}, false
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return serverSettingsPatch{}, false
+	}
+
+	var direct serverSettingsPatch
+	if err := json.Unmarshal(data, &direct); err == nil && settingsPatchHasValue(direct) {
+		return direct, true
+	}
+
+	var nested map[string]json.RawMessage
+	if err := json.Unmarshal(data, &nested); err != nil {
+		return serverSettingsPatch{}, false
+	}
+	for _, key := range []string{"d2-lsp", "d2Lsp"} {
+		raw, ok := nested[key]
+		if !ok {
+			continue
+		}
+		var patch serverSettingsPatch
+		if err := json.Unmarshal(raw, &patch); err == nil && settingsPatchHasValue(patch) {
+			return patch, true
+		}
+	}
+	return serverSettingsPatch{}, false
+}
+
+func settingsPatchHasValue(patch serverSettingsPatch) bool {
+	return patch.DiagnosticsOnInitialize != nil || patch.DiagnosticsOnWatchedFiles != nil
 }
 
 func (s *Server) changeWorkspaceFolders(added, removed []workspaceFolder) {
