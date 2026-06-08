@@ -10,6 +10,7 @@ Current support:
 - `rootUri`, LSP 3.17 `workspaceFolders`, and dynamic workspace folder changes
 - incremental text document synchronization for `.d2` buffers, with diagnostics refreshed on save
 - publish syntax and semantic diagnostics from upstream D2 parser/compiler, including imported workspace files
+- workspace diagnostic scan after initialization
 - completion from upstream D2 language tooling
 - document formatting from the upstream D2 formatter
 - document symbols from the D2 AST

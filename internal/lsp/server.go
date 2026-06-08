@@ -550,7 +550,7 @@ func (s *Server) handleNotification(method string, params json.RawMessage, write
 
 	switch method {
 	case methodInitialized:
-		return nil
+		return s.publishWorkspaceDiagnostics(writer)
 	case methodTextDocumentDidOpen:
 		var open didOpenTextDocumentParams
 		if err := json.Unmarshal(params, &open); err != nil {
@@ -889,6 +889,34 @@ func (s *Server) publishDiagnostics(writer io.Writer, doc document) error {
 		Method:  methodTextDocumentPublishDiagnostic,
 		Params:  params,
 	})
+}
+
+func (s *Server) publishWorkspaceDiagnostics(writer io.Writer) error {
+	files, uriByPath := s.workspaceFiles()
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		uri := uriByPath[path]
+		if uri == "" {
+			uri = uriFromPath(path)
+		}
+		params := publishDiagnosticsParams{
+			URI:         uri,
+			Diagnostics: d2diagnostics.ParseInFiles(path, files[path], files),
+		}
+		if err := writeJSON(writer, notificationMessage{
+			JSONRPC: jsonRPCVersion,
+			Method:  methodTextDocumentPublishDiagnostic,
+			Params:  params,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func endPosition(text string) position {

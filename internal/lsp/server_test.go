@@ -713,6 +713,96 @@ func TestDidOpenDiagnosticsUseOpenImportedDocument(t *testing.T) {
 	}
 }
 
+func TestInitializedPublishesWorkspaceDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	diagramPath := filepath.Join(root, "diagram.d2")
+	if err := os.WriteFile(diagramPath, []byte("x: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write diagram: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodInitialized,
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle initialized: %v", err)
+	}
+
+	notification := readDiagnosticsNotification(t, &output)
+	if notification.Params.URI != uriFromPath(diagramPath) {
+		t.Fatalf("unexpected diagnostics uri %q", notification.Params.URI)
+	}
+	if len(notification.Params.Diagnostics) == 0 {
+		t.Fatal("expected workspace diagnostics")
+	}
+	if notification.Params.Version != nil {
+		t.Fatalf("expected nil version for workspace diagnostics, got %#v", notification.Params.Version)
+	}
+}
+
+func TestInitializedWorkspaceDiagnosticsUseOpenImportedDocument(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, "index.d2")
+	importPath := filepath.Join(root, "ok.d2")
+	if err := os.WriteFile(indexPath, []byte("hey: @ok\nhey.okay\n"), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(importPath, []byte("okay: {shape: not-a-shape}\n"), 0644); err != nil {
+		t.Fatalf("write invalid import: %v", err)
+	}
+
+	server := NewServer()
+	var output bytes.Buffer
+	_, err := server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  methodInitialize,
+		"params": map[string]interface{}{
+			"rootUri": uriFromPath(root),
+		},
+	}), &output)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	server.setDocument(document{
+		URI:     uriFromPath(importPath),
+		Version: 1,
+		Text:    "okay\n",
+	})
+	output.Reset()
+
+	_, err = server.handle(mustMarshal(t, map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  methodInitialized,
+	}), &output)
+	if err != nil {
+		t.Fatalf("handle initialized: %v", err)
+	}
+
+	notification := readDiagnosticsNotification(t, &output)
+	if notification.Params.URI != uriFromPath(indexPath) {
+		t.Fatalf("unexpected diagnostics uri %q", notification.Params.URI)
+	}
+	if len(notification.Params.Diagnostics) != 0 {
+		t.Fatalf("expected open import buffer to suppress disk diagnostics, got %#v", notification.Params.Diagnostics)
+	}
+}
+
 func TestDidCloseDeletesDocumentAndClearsDiagnostics(t *testing.T) {
 	server := NewServer()
 	var output bytes.Buffer
